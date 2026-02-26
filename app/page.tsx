@@ -1,96 +1,215 @@
 "use client";
 
-import { useState } from "react";
-import { ethers } from "ethers";
-
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
+import { useState, useEffect } from "react";
 
 export default function Home() {
-  const [account, setAccount] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
 
-  async function connectWallet() {
-    if (!window.ethereum) {
-      alert("Install OPWallet");
-      return;
-    }
+  const [role, setRole] = useState<"Buyer" | "Seller">("Buyer");
+  const [serviceType, setServiceType] = useState("Web Development");
+  const [customService, setCustomService] = useState("");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
 
-    let providerSource = window.ethereum;
+  const serviceOptions = [
+    "Web Development",
+    "Smart Contract Development",
+    "Smart Contract Audit",
+    "UI/UX Design",
+    "Graphic Design",
+    "Content Creation",
+    "Marketing & Growth",
+    "Consulting",
+    "Security Review",
+    "Other (Custom Service)",
+  ];
 
-    // Якщо кілька гаманців інжектять ethereum
-    if (window.ethereum.providers) {
-      const providers = window.ethereum.providers;
+  // 🔥 LISTEN FOR OPWALLET RESPONSE
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (!event.data) return;
 
-      // Шукаємо провайдер, який НЕ MetaMask
-      const opProvider = providers.find(
-        (p: any) => !p.isMetaMask
-      );
-
-      if (opProvider) {
-        providerSource = opProvider;
+      // OPWallet зазвичай повертає address через postMessage
+      if (event.data.type === "OPWALLET_CONNECTED") {
+        setAddress(event.data.address);
+        setConnected(true);
       }
-    }
+    };
 
-    try {
-      const provider = new ethers.BrowserProvider(providerSource);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      setAccount(accounts[0]);
-    } catch (error) {
-      console.error(error);
-    }
-  }
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // 🔥 DEEP LINK CONNECT
+  const connectWallet = () => {
+    const url = window.location.href;
+
+    window.open(
+      `opwallet://connect?url=${encodeURIComponent(url)}`,
+      "_blank"
+    );
+  };
+
+  // ✅ LOG OUT
+  const disconnectWallet = () => {
+    setConnected(false);
+    setAddress(null);
+  };
+
+  const createEscrow = () => {
+    const finalService =
+      serviceType === "Other (Custom Service)"
+        ? customService
+        : serviceType;
+
+    console.log("Escrow Data:", {
+      role,
+      service: finalService,
+      description,
+      amount,
+      address,
+    });
+  };
 
   return (
     <main
-      className="min-h-screen relative text-white flex flex-col items-center p-10 bg-cover bg-center"
+      className="min-h-screen relative flex flex-col items-center justify-center text-white bg-cover bg-center"
       style={{ backgroundImage: "url('/bg.png')" }}
     >
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/70"></div>
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
 
-      <div className="relative z-10 w-full flex flex-col items-center">
-        <h1 className="text-4xl font-bold mb-4 text-orange-500">
+      <div className="relative z-10 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-10 shadow-2xl max-w-lg w-full">
+
+        <h1 className="text-3xl font-semibold mb-2 text-center tracking-wide">
           OPNet Marketplace
         </h1>
 
-        {!account ? (
+        <p className="text-white/50 mb-8 text-center text-sm">
+          Decentralized Service Escrow on Bitcoin L2
+        </p>
+
+        {!connected ? (
           <button
             onClick={connectWallet}
-            className="mb-8 bg-orange-500 hover:bg-orange-600 transition px-6 py-3 rounded-lg"
+            className="w-full py-2 mb-6 rounded-lg border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition text-sm font-medium cursor-pointer focus:outline-none"
           >
             Connect OPWallet
           </button>
         ) : (
-          <p className="mb-8 text-green-400">
-            Connected: {account}
-          </p>
+          <div className="mb-6 text-center">
+            <p className="text-green-400 text-xs mb-1">
+              Connected
+            </p>
+
+            <div className="bg-black/40 p-2 rounded text-xs break-all mb-3">
+              {address}
+            </div>
+
+            <button
+              onClick={disconnectWallet}
+              className="px-4 py-1 text-xs border border-red-500 text-red-400 rounded-md hover:bg-red-500 hover:text-white transition cursor-pointer focus:outline-none"
+            >
+              Log out
+            </button>
+          </div>
         )}
 
-        <div className="bg-zinc-900/90 p-8 rounded-2xl w-full max-w-xl shadow-lg backdrop-blur">
-          <h2 className="text-2xl mb-6 font-semibold">
-            Create Service Escrow
-          </h2>
+        {/* BUY / SELL */}
+        <div className="flex mb-6 bg-black/40 rounded-lg p-1 text-sm border border-white/10">
+          <button
+            onClick={() => setRole("Buyer")}
+            className={`w-1/2 py-2 rounded-md transition cursor-pointer focus:outline-none ${
+              role === "Buyer"
+                ? "bg-orange-500/20 text-orange-400"
+                : "text-white/60 hover:text-white"
+            }`}
+          >
+            Buyer
+          </button>
 
-          <input
-            type="text"
-            placeholder="Service description"
-            className="w-full mb-4 p-3 bg-zinc-800 rounded-lg"
-          />
-
-          <input
-            type="number"
-            placeholder="Amount (OP tokens)"
-            className="w-full mb-6 p-3 bg-zinc-800 rounded-lg"
-          />
-
-          <button className="w-full bg-orange-500 hover:bg-orange-600 transition p-3 rounded-lg font-semibold">
-            Create Escrow
+          <button
+            onClick={() => setRole("Seller")}
+            className={`w-1/2 py-2 rounded-md transition cursor-pointer focus:outline-none ${
+              role === "Seller"
+                ? "bg-orange-500/20 text-orange-400"
+                : "text-white/60 hover:text-white"
+            }`}
+          >
+            Seller
           </button>
         </div>
+
+        <h2 className="text-lg font-medium mb-4">
+          Create Service Escrow
+        </h2>
+
+        <select
+          value={serviceType}
+          onChange={(e) => setServiceType(e.target.value)}
+          className="w-full mb-4 p-3 rounded-lg bg-black/40 border border-white/10 text-sm focus:outline-none cursor-pointer"
+        >
+          {serviceOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+
+        {serviceType === "Other (Custom Service)" && (
+          <input
+            type="text"
+            placeholder="Custom service"
+            value={customService}
+            onChange={(e) => setCustomService(e.target.value)}
+            className="w-full mb-4 p-3 rounded-lg bg-black/40 border border-white/10 text-sm focus:outline-none"
+          />
+        )}
+
+        <textarea
+          placeholder="Optional description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full mb-4 p-3 rounded-lg bg-black/40 border border-white/10 min-h-[90px] text-sm focus:outline-none"
+        />
+
+        <input
+          type="number"
+          placeholder="Amount (OP tokens)"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full mb-6 p-3 rounded-lg bg-black/40 border border-white/10 text-sm focus:outline-none"
+        />
+
+        <button
+          onClick={createEscrow}
+          disabled={!connected}
+          className="w-full py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40 transition text-sm font-medium cursor-pointer focus:outline-none"
+        >
+          Create Escrow
+        </button>
+
       </div>
+
+      {/* FOOTER */}
+      <div className="relative z-10 mt-8 flex gap-6 text-sm text-white/50">
+        <a
+          href="https://github.com/SHdarwin"
+          target="_blank"
+          className="hover:text-orange-400 transition cursor-pointer"
+        >
+          GitHub
+        </a>
+
+        <a
+          href="https://x.com/OxDarwin"
+          target="_blank"
+          className="hover:text-orange-400 transition cursor-pointer"
+        >
+          Creator
+        </a>
+      </div>
+
     </main>
   );
 }
