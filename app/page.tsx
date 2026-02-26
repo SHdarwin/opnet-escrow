@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export default function Home() {
   const [connected, setConnected] = useState(false);
@@ -25,30 +25,29 @@ export default function Home() {
     "Other (Custom Service)",
   ];
 
-  // 🔥 LISTEN FOR OPWALLET RESPONSE
-  useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      if (!event.data) return;
+  // ✅ CONNECT OPWallet (Injected Provider)
+  const connectWallet = async () => {
+    try {
+      if (typeof window === "undefined") return;
 
-      // OPWallet зазвичай повертає address через postMessage
-      if (event.data.type === "OPWALLET_CONNECTED") {
-        setAddress(event.data.address);
+      const provider = (window as any).ethereum;
+
+      if (!provider) {
+        alert("OPWallet not found. Install OPWallet extension.");
+        return;
+      }
+
+      const accounts = await provider.request({
+        method: "eth_requestAccounts",
+      });
+
+      if (accounts?.length) {
+        setAddress(accounts[0]);
         setConnected(true);
       }
-    };
-
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, []);
-
-  // 🔥 DEEP LINK CONNECT
-  const connectWallet = () => {
-    const url = window.location.href;
-
-    window.open(
-      `opwallet://connect?url=${encodeURIComponent(url)}`,
-      "_blank"
-    );
+    } catch (err) {
+      console.error("Wallet connection error:", err);
+    }
   };
 
   // ✅ LOG OUT
@@ -94,7 +93,7 @@ export default function Home() {
             onClick={connectWallet}
             className="w-full py-2 mb-6 rounded-lg border border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white transition text-sm font-medium cursor-pointer focus:outline-none"
           >
-            Connect OPWallet
+            Connect Wallet
           </button>
         ) : (
           <div className="mb-6 text-center">
@@ -115,7 +114,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* BUY / SELL */}
         <div className="flex mb-6 bg-black/40 rounded-lg p-1 text-sm border border-white/10">
           <button
             onClick={() => setRole("Buyer")}
@@ -191,7 +189,6 @@ export default function Home() {
 
       </div>
 
-      {/* FOOTER */}
       <div className="relative z-10 mt-8 flex gap-6 text-sm text-white/50">
         <a
           href="https://github.com/SHdarwin"
