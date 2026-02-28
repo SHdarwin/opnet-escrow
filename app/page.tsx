@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { JSONRpcProvider } from "opnet";
+// JSONRpcProvider removed — using raw fetch for RPC calls
 import { BinaryWriter } from "@btc-vision/transaction";
 import { networks } from "@btc-vision/bitcoin";
 import { Buffer } from "buffer";
@@ -118,6 +118,8 @@ async function sendContractTx(
       contract:        CONTRACT_ADDRESS,
       contractAddress: CONTRACT_ADDRESS,
       calldata:        "0x" + calldata.toString("hex"),
+      value:           "0x0",
+      gasLimit:        "0x0",
     });
     return;
   }
@@ -185,10 +187,19 @@ async function sendContractTx(
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function rpcCall(calldata: Buffer): Promise<string | null> {
-  const rpc    = new JSONRpcProvider(OPNET_RPC_URL, NETWORK);
-  const result = await rpc.call(CONTRACT_ADDRESS, calldata);
-  if (!result || "error" in result) return null;
-  return (result as any).result ?? null;
+  const res = await fetch(OPNET_RPC_URL, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({
+      jsonrpc: "2.0",
+      id:      1,
+      method:  "btc_call",
+      params:  [CONTRACT_ADDRESS, "0x" + calldata.toString("hex"), "latest"],
+    }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error("RPC: " + JSON.stringify(json.error));
+  return json.result ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
