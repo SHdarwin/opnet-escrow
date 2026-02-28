@@ -9,8 +9,9 @@ import { Buffer } from "buffer";
 (globalThis as any).Buffer = Buffer;
 
 // ── Config ────────────────────────────────────────────────────────────────────
-// P2OP (SegWit v16) — native OPNet contract address format, do NOT convert
-const CONTRACT_ADDRESS = "opr1sqpnevnum64xv0x80jze9lesrwksty7hjhqxffn9g";
+// OPNet address: opr1sqpnevnum64xv0x80jze9lesrwksty7hjhqxffn9g
+// Converted to standard Bitcoin regtest segwit address (same witness program):
+const CONTRACT_ADDRESS = "bcrt1qv7tylx74fnre3muskf07vqm45ze84u4cjd888m";
 const OPNET_RPC_URL    = "https://regtest.opnet.org";
 const NETWORK          = networks.regtest;
 
@@ -111,6 +112,10 @@ async function sendContractTx(
 ): Promise<void> {
   statusCb("Preparing transaction…");
 
+  // DEBUG
+  console.log("[DEBUG] provider keys:", Object.keys(provider).filter(k => typeof provider[k] === "function"));
+  console.log("[DEBUG] signInteraction:", typeof provider.signInteraction);
+  console.log("[DEBUG] sendInteraction:", typeof provider.sendInteraction);
 
   if (typeof provider.signInteraction === "function") {
     statusCb("Waiting for wallet signature…");
@@ -136,6 +141,7 @@ async function sendContractTx(
     return;
   }
 
+  console.log("[DEBUG] falling back to PSBT");
 
   statusCb("Fetching UTXOs…");
   const rawUtxos: any[] = await provider.getBitcoinUtxos();
@@ -760,6 +766,23 @@ export default function MarketplacePage() {
           <span>Contract: <span className="text-white/40">{shortAddr(CONTRACT_ADDRESS)}</span></span>
           <span>OPNet Regtest</span>
         </div>
+      </div>
+<div className="relative z-10 mt-8 flex gap-6 text-sm text-white/50">
+        <a
+          href="https://github.com/SHdarwin"
+          target="_blank"
+          className="hover:text-orange-400 transition cursor-pointer"
+        >
+          GitHub
+        </a>
+
+        <a
+          href="https://x.com/OxDarwin"
+          target="_blank"
+          className="hover:text-orange-400 transition cursor-pointer"
+        >
+          X (Twitter)
+        </a>
       </div>
     </main>
   );
