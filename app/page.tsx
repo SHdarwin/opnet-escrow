@@ -117,9 +117,7 @@ async function sendContractTx(
     await provider.signInteraction({
       contract:        CONTRACT_ADDRESS,
       contractAddress: CONTRACT_ADDRESS,
-      to:              CONTRACT_ADDRESS,
-      calldata:        calldata,
-      calldataHex:     "0x" + calldata.toString("hex"),
+      calldata:        "0x" + calldata.toString("hex"),
     });
     return;
   }
