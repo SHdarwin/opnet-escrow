@@ -118,7 +118,8 @@ function decodeOrderResponse(hex: string): any {
 async function sendContractTx(
   provider: any,
   calldata: Buffer,
-  statusCb: (msg: string) => void
+  statusCb: (msg: string) => void,
+  userPubKey?: string,
 ): Promise<void> {
   statusCb("Preparing transaction…");
   statusCb("Fetching UTXOs…");
@@ -142,12 +143,27 @@ async function sendContractTx(
   const { Psbt } = await import("bitcoinjs-lib");
   const psbt = new Psbt({ network: NETWORK as any });
 
-  if (scriptHex.startsWith("5120")) {
+  const isTaproot = scriptHex.startsWith("5120");
+
+  if (isTaproot) {
+    // tapInternalKey must be the real 32-byte x-only public key of the user,
+    // NOT the output key from scriptPubKey (which is tweaked).
+    // Compressed pubkey = 33 bytes (02/03 prefix + 32 bytes x-coord).
+    // x-only = last 32 bytes (drop the 02/03 prefix byte).
+    let internalKey: Buffer;
+    if (userPubKey) {
+      const pkBuf = Buffer.from(userPubKey.replace(/^0x/, ""), "hex");
+      // If 33 bytes compressed — drop first byte to get x-only 32 bytes
+      internalKey = pkBuf.length === 33 ? pkBuf.slice(1) : pkBuf.slice(0, 32);
+    } else {
+      // Fallback: use output key from script (may fail for some wallets)
+      internalKey = Buffer.from(scriptHex.slice(4), "hex");
+    }
     psbt.addInput({
       hash:           raw.transactionId,
       index:          raw.outputIndex,
       witnessUtxo:    { script: scriptBuf, value: inputValue },
-      tapInternalKey: Buffer.from(scriptHex.slice(4), "hex"),
+      tapInternalKey: internalKey,
     });
   } else {
     psbt.addInput({
@@ -337,7 +353,7 @@ export default function MarketplacePage() {
       const serviceName = serviceType === "Other (Custom Service)" ? customService : serviceType;
 
       const provider = (window as any).opnet.web3.provider;
-      await sendContractTx(provider, calldata, inf);
+      await sendContractTx(provider, calldata, inf, myPubKey ?? undefined);
 
       ok(`✅ Order created! "${serviceName}" · ${priceRbtc} rBTC`);
       await refreshBalance();
@@ -370,7 +386,7 @@ export default function MarketplacePage() {
       inf(`Encoding ${label}…`);
       const calldata = await encodeWithOrderId(method, orderId);
       const provider = (window as any).opnet.web3.provider;
-      await sendContractTx(provider, calldata, inf);
+      await sendContractTx(provider, calldata, inf, myPubKey ?? undefined);
       ok(`✅ ${label} submitted`);
       if (orderIdInput) await handleGetOrder();
       await refreshBalance();
