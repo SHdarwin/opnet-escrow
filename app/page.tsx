@@ -150,20 +150,13 @@ async function sendContractTx(
     // NOT the output key from scriptPubKey (which is tweaked).
     // Compressed pubkey = 33 bytes (02/03 prefix + 32 bytes x-coord).
     // x-only = last 32 bytes (drop the 02/03 prefix byte).
-    let internalKey: Buffer;
-    if (userPubKey) {
-      const pkBuf = Buffer.from(userPubKey.replace(/^0x/, ""), "hex");
-      // If 33 bytes compressed — drop first byte to get x-only 32 bytes
-      internalKey = pkBuf.length === 33 ? pkBuf.slice(1) : pkBuf.slice(0, 32);
-    } else {
-      // Fallback: use output key from script (may fail for some wallets)
-      internalKey = Buffer.from(scriptHex.slice(4), "hex");
-    }
+const outputKey = Buffer.from(scriptHex.slice(4), "hex");
     psbt.addInput({
       hash:           raw.transactionId,
       index:          raw.outputIndex,
       witnessUtxo:    { script: scriptBuf, value: inputValue },
-      tapInternalKey: internalKey,
+      tapInternalKey: outputKey,
+      tapMerkleRoot:  Buffer.alloc(0),
     });
   } else {
     psbt.addInput({
