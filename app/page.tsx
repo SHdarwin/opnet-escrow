@@ -156,7 +156,6 @@ const outputKey = Buffer.from(scriptHex.slice(4), "hex");
       index:          raw.outputIndex,
       witnessUtxo:    { script: scriptBuf, value: inputValue },
       tapInternalKey: outputKey,
-      tapMerkleRoot:  Buffer.alloc(0),
     });
   } else {
     psbt.addInput({
