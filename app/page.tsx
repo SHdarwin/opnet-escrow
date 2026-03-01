@@ -84,64 +84,22 @@ function decodeOrderResponse(hex: string): any {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TX SENDER
-//  OPWallet очікує tweaked output key (be1962b4...) як tapInternalKey,
-//  а не internal key (7829c7cf...). Беремо його прямо зі scriptPubKey UTXO.
+//  Використовуємо signAndBroadcastInteraction — OPNet-нативний метод.
+//  Wallet сам будує PSBT, підписує і бродкастить. Нам не треба вручну
+//  займатись tapInternalKey, UTXOs, fee і т.д.
 // ─────────────────────────────────────────────────────────────────────────────
 async function sendContractTx(
   provider: any,
   calldata: Buffer,
   statusCb: (msg: string) => void,
 ): Promise<void> {
-  statusCb("Fetching UTXOs...");
-  const rawUtxos: any[] = await provider.getBitcoinUtxos();
-  if (!rawUtxos.length) throw new Error("No UTXOs available");
-
-  const raw        = [...rawUtxos].sort((a, b) => Number(b.value) - Number(a.value))[0];
-  const inputValue = BigInt(raw.value);
-  const fee        = 10_000n;
-  const change     = inputValue - fee;
-  if (change <= 546n) throw new Error("Insufficient balance to cover fee");
-
-  const scriptHex = (raw.scriptPubKey?.hex ?? "") as string;
-  const scriptBuf = Buffer.from(scriptHex, "hex");
-
-  const opReturnData   = Buffer.concat([Buffer.from(CONTRACT_ADDRESS, "utf8"), calldata]);
-  const opReturnScript = Uint8Array.from(
-    Buffer.concat([Buffer.from([0x6a, opReturnData.length]), opReturnData])
-  );
-
-  const { Psbt } = await import("bitcoinjs-lib");
-  const psbt = new Psbt({ network: NETWORK as any });
-
-  const isTaproot = scriptHex.startsWith("5120");
-
-  if (isTaproot) {
-    // OPWallet очікує tweaked output key як tapInternalKey.
-    // scriptHex = "5120" + 32-byte output key (вже tweaked).
-    // slice(4) = прибираємо "5120" (OP_1 + PUSH32) → отримуємо 32 байти output key.
-    const outputKey = Buffer.from(scriptHex.slice(4), "hex");
-
-    psbt.addInput({
-      hash:           raw.transactionId,
-      index:          raw.outputIndex,
-      witnessUtxo:    { script: scriptBuf, value: inputValue },
-      tapInternalKey: outputKey,
-    });
-  } else {
-    psbt.addInput({
-      hash:        raw.transactionId,
-      index:       raw.outputIndex,
-      witnessUtxo: { script: scriptBuf, value: inputValue },
-    });
-  }
-
-  psbt.addOutput({ script: opReturnScript,             value: 0n    });
-  psbt.addOutput({ script: Uint8Array.from(scriptBuf), value: change });
-
   statusCb("Waiting for wallet signature...");
-  const signed = await provider.signPsbt(psbt.toHex());
-  statusCb("Broadcasting...");
-  await provider.pushPsbt(signed);
+  const result = await provider.signAndBroadcastInteraction({
+    to:       CONTRACT_ADDRESS,
+    calldata: calldata,
+  });
+  statusCb("Broadcasted!");
+  console.log("signAndBroadcastInteraction result:", result);
 }
 
 async function rpcCall(calldata: Buffer): Promise<string | null> {
