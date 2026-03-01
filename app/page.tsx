@@ -97,6 +97,7 @@ async function sendContractTx(
   const result = await provider.signAndBroadcastInteraction({
     to:       CONTRACT_ADDRESS,
     calldata: calldata,
+    value:    0n,
   });
   statusCb("Broadcasted!");
   console.log("signAndBroadcastInteraction result:", result);
