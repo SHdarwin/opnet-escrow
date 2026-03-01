@@ -84,8 +84,8 @@ function decodeOrderResponse(hex: string): any {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TX SENDER
-//  Pubkey береться напряму з getPublicKey() всередині функції.
-//  Ніяких параметрів pubkey ззовні — завжди свіжий ключ від гаманця.
+//  OPWallet очікує tweaked output key (be1962b4...) як tapInternalKey,
+//  а не internal key (7829c7cf...). Беремо його прямо зі scriptPubKey UTXO.
 // ─────────────────────────────────────────────────────────────────────────────
 async function sendContractTx(
   provider: any,
@@ -116,16 +116,16 @@ async function sendContractTx(
   const isTaproot = scriptHex.startsWith("5120");
 
   if (isTaproot) {
-    // Беремо pubkey напряму з гаманця — завжди актуальний
-    const rawPk      = await provider.getPublicKey() as string;
-    const pkBuf      = Buffer.from(rawPk.replace(/^0x/, ""), "hex");
-    const internalKey = pkBuf.length === 33 ? pkBuf.slice(1) : pkBuf;
+    // OPWallet очікує tweaked output key як tapInternalKey.
+    // scriptHex = "5120" + 32-byte output key (вже tweaked).
+    // slice(4) = прибираємо "5120" (OP_1 + PUSH32) → отримуємо 32 байти output key.
+    const outputKey = Buffer.from(scriptHex.slice(4), "hex");
 
     psbt.addInput({
       hash:           raw.transactionId,
       index:          raw.outputIndex,
       witnessUtxo:    { script: scriptBuf, value: inputValue },
-      tapInternalKey: internalKey,
+      tapInternalKey: outputKey,
     });
   } else {
     psbt.addInput({
