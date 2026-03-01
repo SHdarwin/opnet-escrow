@@ -7,7 +7,7 @@ import { Buffer } from "buffer";
 
 (globalThis as any).Buffer = Buffer;
 
-const CONTRACT_ADDRESS = "opr1sqpnevnum64xv0x80jze9lesrwksty7hjhqxffn9g";
+const CONTRACT_ADDRESS = "opr1sqptn9823sjyr6jf27q0guse94wgy8kmecstpd8xu";
 const OPNET_RPC_URL    = "https://regtest.opnet.org";
 const NETWORK          = networks.regtest;
 
