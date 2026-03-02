@@ -84,37 +84,102 @@ function decodeOrderResponse(hex: string): any {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TX SENDER
-//  Використовуємо signAndBroadcastInteraction — OPNet-нативний метод.
-//  Wallet сам будує PSBT, підписує і бродкастить. Нам не треба вручну
-//  займатись tapInternalKey, UTXOs, fee і т.д.
+//  Використовуємо signPsbt з nonWitnessUtxo (повна tx) — OPWallet потребує
+//  його для Taproot верифікації замість witnessUtxo.
 // ─────────────────────────────────────────────────────────────────────────────
 async function sendContractTx(
   provider: any,
   calldata: Buffer,
   statusCb: (msg: string) => void,
 ): Promise<void> {
+  statusCb("Fetching UTXOs...");
+  const rawUtxos: any[] = await provider.getBitcoinUtxos();
+  if (!rawUtxos.length) throw new Error("No UTXOs available");
+
+  const raw        = [...rawUtxos].sort((a, b) => Number(b.value) - Number(a.value))[0];
+  const inputValue = BigInt(raw.value);
+  const fee        = 10_000n;
+  const change     = inputValue - fee;
+  if (change <= 546n) throw new Error("Insufficient balance to cover fee");
+
+  const scriptHex = (raw.scriptPubKey?.hex ?? "") as string;
+  const scriptBuf = Buffer.from(scriptHex, "hex");
+
+  const opReturnData   = Buffer.concat([Buffer.from(CONTRACT_ADDRESS, "utf8"), calldata]);
+  const opReturnScript = Uint8Array.from(
+    Buffer.concat([Buffer.from([0x6a, opReturnData.length]), opReturnData])
+  );
+
+  const { Psbt } = await import("bitcoinjs-lib");
+  const psbt = new Psbt({ network: NETWORK as any });
+
+  const isTaproot = scriptHex.startsWith("5120");
+
+  const inputData: any = {
+    hash:  raw.transactionId,
+    index: raw.outputIndex,
+  };
+
+  if (raw.nonWitnessUtxoBase64) {
+    // OPWallet потребує nonWitnessUtxo — повну попередню транзакцію
+    inputData.nonWitnessUtxo = Buffer.from(raw.nonWitnessUtxoBase64, "base64");
+  } else {
+    inputData.witnessUtxo = { script: scriptBuf, value: inputValue };
+  }
+
+  if (isTaproot) {
+    // output key зі scriptPubKey — OPWallet використовує його для верифікації
+    inputData.tapInternalKey = Buffer.from(scriptHex.slice(4), "hex");
+  }
+
+  psbt.addInput(inputData);
+  psbt.addOutput({ script: opReturnScript,             value: 0n    });
+  psbt.addOutput({ script: Uint8Array.from(scriptBuf), value: change });
+
   statusCb("Waiting for wallet signature...");
-  const result = await provider.signAndBroadcastInteraction({
-    to:       CONTRACT_ADDRESS,
-    calldata: calldata,
-    value:    0n,
-  });
-  statusCb("Broadcasted!");
-  console.log("signAndBroadcastInteraction result:", result);
+  const signed = await provider.signPsbt(psbt.toHex());
+  statusCb("Broadcasting...");
+  await provider.pushPsbt(signed);
 }
 
 async function rpcCall(calldata: Buffer): Promise<string | null> {
-  const res = await fetch(OPNET_RPC_URL, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({
-      jsonrpc: "2.0", id: 1, method: "btc_call",
-      params: [CONTRACT_ADDRESS, "0x" + calldata.toString("hex"), "latest"],
-    }),
-  });
-  const json = await res.json();
-  if (json.error) throw new Error("RPC: " + JSON.stringify(json.error));
-  return json.result ?? null;
+  // Використовуємо провайдер гаманця для RPC — він знає правильний endpoint
+  const provider = (window as any).opnet?.web3?.provider;
+  if (!provider) throw new Error("Wallet not connected");
+  try {
+    const result = await provider._request({
+      method: "btc_call",
+      params: {
+        to:       CONTRACT_ADDRESS,
+        calldata: "0x" + calldata.toString("hex"),
+        block:    "latest",
+      },
+    });
+    return result ?? null;
+  } catch {
+    // Fallback до прямого HTTP якщо провайдер не підтримує btc_call
+    const endpoints = [
+      "https://regtest.opnet.org",
+      "https://regtest.opnet.org/v1",
+    ];
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            jsonrpc: "2.0", id: 1, method: "btc_call",
+            params: [CONTRACT_ADDRESS, "0x" + calldata.toString("hex"), "latest"],
+          }),
+        });
+        if (!res.ok) continue;
+        const json = await res.json();
+        if (json.error) continue;
+        return json.result ?? null;
+      } catch { continue; }
+    }
+    throw new Error("RPC call failed — check network");
+  }
 }
 
 const STATE_LABELS: Record<number, { label: string; color: string }> = {
